@@ -25,6 +25,7 @@ window.DB = (function () {
       const workouts = (sess || []).map(s => ({
         id: s.id, cat: s.category, title: s.title, level: s.level,
         min: s.duration_min, focus: s.focus, seed: s.thumb_seed, locked: s.unlock_rule,
+        steps: s.steps || [],
       }));
       const categories = [...new Set(workouts.map(w => w.cat))];
       const stress = {};
@@ -76,6 +77,8 @@ window.DB = (function () {
         value: numeric ? parseFloat(value) : null, text_value: numeric ? null : String(value),
       });
     },
+    // ----- Meals -----
+    async recipes() { const { data } = await SB.from("recipes").select("*").eq("is_published", true).order("sort"); return data || []; },
     // ----- Academy -----
     async academyLessons() { const { data } = await SB.from("lessons").select("*").eq("is_published", true).order("sort"); return data || []; },
     async lessonProgress() { const { data } = await SB.from("user_lesson_progress").select("lesson_id,task_done"); const m = {}; (data || []).forEach(r => m[r.lesson_id] = { done: true, task: r.task_done }); return m; },

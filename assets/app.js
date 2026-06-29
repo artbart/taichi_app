@@ -12,12 +12,12 @@
   let DATA = null, ST = null, PROFILE = null;
 
   const NAV = [
-    { id: "home", label: "Home", icon: "🏠" }, { id: "exercises", label: "Exercises", icon: "🧘" },
-    { id: "tracking", label: "Tracking", icon: "📈" }, { id: "stress", label: "Stress release", icon: "🌬️" },
-    { id: "academy", label: "Academy", icon: "📖" }, { id: "challenges", label: "Challenges", icon: "🏆" },
-    { id: "favorites", label: "Favorites", icon: "♡" },
+    { id: "home", label: "Home", icon: "🏠" }, { id: "meals", label: "Meals", icon: "🍽️" },
+    { id: "exercises", label: "Exercises", icon: "🧘" }, { id: "tracking", label: "Tracking", icon: "📈" },
+    { id: "stress", label: "Stress release", icon: "🌬️" }, { id: "academy", label: "Academy", icon: "📖" },
+    { id: "challenges", label: "Challenges", icon: "🏆" }, { id: "favorites", label: "Favorites", icon: "♡" },
   ];
-  const MOBILE_NAV = ["home", "exercises", "tracking", "stress", "favorites"];
+  const MOBILE_NAV = ["home", "exercises", "meals", "tracking", "academy"];
 
   function renderNav(active) {
     const nav = document.getElementById("nav"), bn = document.getElementById("bottomnav");
@@ -132,14 +132,73 @@
   function vWorkout(id) {
     const w = DATA.workouts.find(x => x.id === id); if (!w) return notFound();
     const done = !!ST.completed[id], fav = !!ST.favorites[id];
+    const steps = w.steps || [];
+    const stepsHtml = steps.length ? `<div class="section-title"><h2>Workouts</h2><span style="color:var(--muted);font-weight:700">${steps.length}</span></div>
+      <div class="card listcard">${steps.map((s, i) => `<div class="lrow"><span class="lnum">${String(i+1).padStart(2,"0")}</span>
+        <span class="ltext"><span class="lt">${esc(s.t)}</span><span class="ls"><span class="badge ${lv(s.lvl)}">${esc(s.lvl||"Beginner")}</span> · ${s.min||""} min</span></span><span class="chev">›</span></div>`).join("")}</div>` : "";
     view.innerHTML = `<button class="backlink" onclick="history.back()">‹ Back</button>
-      <div class="player"><img src="${img(w.seed,1000,560)}" alt=""><div class="ov"><div class="pbtn">▶</div><div class="note">Video coming soon — hosting to be added</div></div></div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="badge ${lv(w.level)}">${w.level}</span><h1 class="page" style="margin:0;font-size:24px">${esc(w.title)}</h1></div>
-      <p class="page-sub">${w.min} min · ${esc(w.focus || "")}</p>
+      <div class="player"><img src="${img(w.seed,1000,560)}" alt=""><div class="ov"><span class="badge" style="position:absolute;top:16px;left:16px;background:rgba(255,255,255,.9)">COLLECTION</span><div class="pbtn">▶</div><div class="note">Video coming soon — hosting to be added</div></div></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="badge ${lv(w.level)}">${w.level}</span><h1 class="page" style="margin:0;font-size:24px">${esc(w.title)}</h1>
+        <button class="favico" id="favBtn" title="Save">${fav?"♥":"♡"}</button></div>
+      <p class="page-sub">${w.min} min · ${esc(w.focus || "")}${steps.length?` · ${steps.length} workouts`:""}</p>
       <p style="color:#34433b">A gentle ${esc((w.cat||"").toLowerCase())} session. Follow along at your own pace — sit tall, breathe slowly, and stop if anything hurts.</p>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px"><button class="btn" id="markDone">${done?"✓ Completed":"Mark as complete"}</button><button class="btn ghost" id="favBtn">${fav?"♥ Saved":"♡ Save"}</button></div>`;
+      ${stepsHtml}
+      <div class="cta-fixed"><button class="btn block" id="markDone">${done?"✓ Completed — do it again":"▶ Start collection"}</button></div>`;
     view.querySelector("#markDone").onclick = async () => { const on = !ST.completed[id]; if (on) ST.completed[id] = true; else delete ST.completed[id]; await DB.toggleSession(id, on); vWorkout(id); };
     view.querySelector("#favBtn").onclick = async () => { const on = !ST.favorites[id]; if (on) ST.favorites[id] = true; else delete ST.favorites[id]; await DB.toggleFav(id, on); vWorkout(id); };
+  }
+
+  // ---------- Meals ----------
+  let _recipes = null;
+  async function vMeals(tab) {
+    tab = tab || "today";
+    view.innerHTML = `<h1 class="page">Meals</h1><p class="page-sub">Loading…</p>`;
+    const recipes = _recipes || (_recipes = await DB.recipes());
+    const tabs = `<div class="tabs"><button data-t="today" class="${tab==='today'?'on':''}">Today's plan</button><button data-t="library" class="${tab==='library'?'on':''}">Library</button></div>`;
+    let body;
+    if (tab === "today") {
+      const order = ["breakfast", "lunch", "snack", "dinner"];
+      const doneMap = DB.dayGet("meals");
+      const todays = order.map(t => recipes.find(r => r.meal_type === t)).filter(Boolean);
+      const dn = todays.filter(r => doneMap[r.id]).length;
+      body = `<div class="plan-prog"><span>Today's meals</span><span>${dn}/${todays.length}</span></div><div class="pbar"><i style="width:${todays.length?Math.round(dn/todays.length*100):0}%"></i></div>` +
+        todays.map(r => `<div class="meal-row" data-id="${r.id}"><img src="${img(r.image_seed,200,150)}" alt="">
+          <div class="mt"><span class="badge beg">${esc(r.meal_type)}</span><div class="n">${esc(r.title)}</div><div class="s">${r.minutes} min · ${r.kcal} kcal</div></div>
+          <button class="chk ${doneMap[r.id]?'on':''}" data-done="${r.id}">${doneMap[r.id]?'✓':''}</button></div>`).join("");
+    } else {
+      body = `<div class="grid-cards">${recipes.map(r => `<div class="wcard meal" data-id="${r.id}"><div class="thumb"><img src="${img(r.image_seed,400,260)}" alt="">
+        <span class="b badge beg">${esc(r.meal_type)}</span></div><div class="body"><div class="t">${esc(r.title)}</div><div class="m">${r.minutes} min · ${r.kcal} kcal</div></div></div>`).join("")}</div>`;
+    }
+    view.innerHTML = `<h1 class="page">Meals</h1><p class="page-sub">Simple, gentle recipes to support your routine.</p>${tabs}${body}`;
+    view.querySelectorAll(".tabs button").forEach(b => b.onclick = () => location.hash = "#/meals/" + b.dataset.t);
+    view.querySelectorAll(".meal-row, .meal").forEach(el => el.onclick = (e) => { if (e.target.closest(".chk")) return; location.hash = "#/recipe/" + el.dataset.id; });
+    view.querySelectorAll(".chk[data-done]").forEach(c => c.onclick = (e) => { e.stopPropagation(); DB.dayToggle("meals", c.dataset.done); vMeals("today"); });
+  }
+  async function vRecipe(id) {
+    const recipes = _recipes || (_recipes = await DB.recipes());
+    const r = recipes.find(x => x.id === id); if (!r) return notFound();
+    const fav = !!ST.favorites[id];
+    const ing = (r.ingredients || []).map(i => `<li>${esc(i)}</li>`).join("");
+    const ins = (r.instructions || []).map((s, i) => `<div class="lrow"><span class="lnum">${i+1}</span><span class="ltext"><span class="lt" style="font-weight:600">${esc(s)}</span></span></div>`).join("");
+    const similar = recipes.filter(x => x.id !== id).slice(0, 6).map(x => `<div class="wcard meal" data-id="${x.id}" style="min-width:200px"><div class="thumb"><img src="${img(x.image_seed,400,260)}"><span class="b badge beg">${x.kcal} kcal</span></div><div class="body"><div class="t" style="font-size:15px">${esc(x.title)}</div></div></div>`).join("");
+    view.innerHTML = `<button class="backlink" onclick="location.hash='#/meals'">‹ Meals</button>
+      <div class="info-photo" style="max-width:none;margin:6px 0 14px"><img src="${img(r.image_seed,1000,520)}" alt=""></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="badge beg">${esc(r.meal_type)}</span><h1 class="page" style="margin:0;font-size:24px">${esc(r.title)}</h1>
+        <button class="favico" id="favBtn">${fav?"♥":"♡"}</button></div>
+      <p class="page-sub">${r.minutes} min · ${r.kcal} kcal · ${r.servings} servings</p>
+      <div class="macros"><div><b>${r.protein}g</b><span>Protein</span></div><div><b>${r.carbs}g</b><span>Carbs</span></div><div><b>${r.fat}g</b><span>Fat</span></div></div>
+      <div class="card" style="margin-top:16px"><div class="tabs" id="rtabs"><button data-t="ing" class="on">Ingredients</button><button data-t="nut">Nutrition</button></div>
+        <div id="rbody"><ul class="ing-list">${ing}</ul></div></div>
+      <div class="section-title"><h2>Instructions</h2></div><div class="card listcard">${ins}</div>
+      <div class="section-title"><h2>Similar recipes</h2></div><div class="row-scroll">${similar}</div>`;
+    view.querySelector("#favBtn").onclick = async () => { const on = !ST.favorites[id]; if (on) ST.favorites[id] = true; else delete ST.favorites[id]; await DB.toggleFav(id, on, "recipe"); vRecipe(id); };
+    view.querySelectorAll("#rtabs button").forEach(b => b.onclick = () => {
+      view.querySelectorAll("#rtabs button").forEach(x => x.classList.toggle("on", x === b));
+      view.querySelector("#rbody").innerHTML = b.dataset.t === "ing"
+        ? `<ul class="ing-list">${ing}</ul>`
+        : `<div class="macros" style="margin:6px 0 0"><div><b>${r.kcal}</b><span>kcal</span></div><div><b>${r.protein}g</b><span>Protein</span></div><div><b>${r.carbs}g</b><span>Carbs</span></div><div><b>${r.fat}g</b><span>Fat</span></div></div>`;
+    });
+    view.querySelectorAll(".meal").forEach(el => el.onclick = () => location.hash = "#/recipe/" + el.dataset.id);
   }
 
   function vTracking() {
@@ -156,9 +215,14 @@
       ? `<div class="logger"><input id="val" type="number" inputmode="decimal" placeholder="Enter ${t.label.toLowerCase()} (${t.unit})"></div>`
       : `<div class="moodrow">${["😟","😕","😐","🙂","😄"].map((m,i)=>`<button data-mood="${i+1}">${m}</button>`).join("")}</div>`;
     const hist = ST.history[metric] || [];
+    const isWeight = metric === "weight";
+    const tgtField = isWeight ? `<label class="fl">Target weight (kg)</label><input id="tgt" class="tin" type="number" inputmode="decimal" value="${PROFILE?.target_weight_kg ?? ""}" placeholder="e.g. 70">` : "";
+    const trend = (isWeight && hist.length > 1) ? `<div class="sec-label" style="margin:18px 0 8px">TREND</div><div class="card">${trendSvg(hist, PROFILE?.target_weight_kg)}</div>` : "";
     view.innerHTML = `<button class="backlink" onclick="location.hash='#/tracking'">‹ Tracking</button>
       <h1 class="page">${t.icon} ${t.label}</h1>
-      <div class="card">${input}<button class="btn block" id="save" style="margin-top:14px">Save entry</button></div>
+      <div class="card">${input}${tgtField}<button class="btn block" id="save" style="margin-top:14px">Save entry</button></div>
+      ${trend}
+      <div class="sec-label" style="margin:18px 0 8px">HISTORY</div>
       <div class="hist">${hist.length?hist.map(h=>`<div class="h"><span>${esc(String(h.value))} ${t.unit||""}</span><span style="color:var(--muted)">${new Date(h.at).toLocaleString()}</span></div>`).join(""):'<p class="page-sub">No entries yet.</p>'}</div>`;
     let mood = null;
     view.querySelectorAll(".moodrow button").forEach(b => b.onclick = () => { mood = +b.dataset.mood; view.querySelectorAll(".moodrow button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); });
@@ -166,10 +230,31 @@
       let v = t.numeric ? view.querySelector("#val").value : mood;
       if (t.numeric) { if (!(parseFloat(v) >= 0)) { view.querySelector("#val").focus(); return; } }
       else { if (!v) return; v = ["Very low","Low","Okay","Good","Great"][v-1]; }
+      if (isWeight) { const tg = parseFloat(view.querySelector("#tgt").value); if (tg > 0) { await DB.updateProfile({ target_weight_kg: tg }); if (PROFILE) PROFILE.target_weight_kg = tg; } }
       await DB.addCheckin(metric, v, t.unit);
-      (ST.history[metric] = ST.history[metric] || []).unshift({ value: t.numeric ? v : v, at: new Date().toISOString() });
+      (ST.history[metric] = ST.history[metric] || []).unshift({ value: v, at: new Date().toISOString() });
       ST.latest[metric] = v; vTrack(metric);
     };
+  }
+
+  // small trend line for numeric history (newest-first input)
+  function trendSvg(hist, target) {
+    const pts = hist.slice(0, 12).map(h => parseFloat(h.value)).filter(n => !isNaN(n)).reverse();
+    if (pts.length < 2) return "";
+    const W = 300, H = 110, pad = 8;
+    let lo = Math.min(...pts, target || Infinity), hi = Math.max(...pts, target || -Infinity);
+    if (lo === hi) { lo -= 1; hi += 1; } const range = hi - lo;
+    const x = i => pad + i * (W - 2 * pad) / (pts.length - 1);
+    const y = v => pad + (1 - (v - lo) / range) * (H - 2 * pad);
+    const d = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    const tgtLine = (target > 0) ? `<line x1="${pad}" y1="${y(target).toFixed(1)}" x2="${W-pad}" y2="${y(target).toFixed(1)}" stroke="#9cc2a9" stroke-dasharray="4 4"/>` : "";
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+      <path d="${d} L${x(pts.length-1).toFixed(1)},${H-pad} L${x(0).toFixed(1)},${H-pad} Z" fill="#5a9e6f22"/>
+      ${tgtLine}
+      <path d="${d}" fill="none" stroke="#5a9e6f" stroke-width="2.5"/>
+      <circle cx="${x(0).toFixed(1)}" cy="${y(pts[0]).toFixed(1)}" r="4" fill="#5a9e6f"/>
+      <circle cx="${x(pts.length-1).toFixed(1)}" cy="${y(pts[pts.length-1]).toFixed(1)}" r="4" fill="#5a9e6f"/>
+    </svg><div class="chartlabels"><span>${pts[0]}</span><span>Target ${target||"—"}</span><span>${pts[pts.length-1]}</span></div>`;
   }
 
   function vStress(tab) {
@@ -381,10 +466,11 @@
     if (!DATA) return;
     const [r, a] = (location.hash.replace(/^#\//, "") || "home").split("/");
     const navMap = { workout: "exercises", track: "tracking", profile: "", subscription: "", install: "",
-      lesson: "academy", challenge: "challenges" };
+      lesson: "academy", challenge: "challenges", recipe: "meals" };
     renderNav(r in navMap ? navMap[r] : r);
     window.scrollTo(0, 0);
-    ({ home: vHome, exercises: () => vExercises(a), workout: () => vWorkout(a), tracking: vTracking,
+    ({ home: vHome, meals: () => vMeals(a), recipe: () => vRecipe(a),
+       exercises: () => vExercises(a), workout: () => vWorkout(a), tracking: vTracking,
        track: () => vTrack(a), stress: () => vStress(a), favorites: vFavorites,
        profile: vProfile, subscription: vManageSub, install: vInstall,
        academy: vAcademy, lesson: () => vLesson(a),
