@@ -150,6 +150,7 @@
 
   // ---------- Meals ----------
   let _recipes = null;
+  let _mealCat = "all", _mealQ = "";
   async function vMeals(tab) {
     tab = tab || "today";
     view.innerHTML = `<h1 class="page">Meals</h1><p class="page-sub">Loading…</p>`;
@@ -166,11 +167,29 @@
           <div class="mt"><span class="badge beg">${esc(r.meal_type)}</span><div class="n">${esc(r.title)}</div><div class="s">${r.minutes} min · ${r.kcal} kcal</div></div>
           <button class="chk ${doneMap[r.id]?'on':''}" data-done="${r.id}">${doneMap[r.id]?'✓':''}</button></div>`).join("");
     } else {
-      body = `<div class="grid-cards">${recipes.map(r => `<div class="wcard meal" data-id="${r.id}"><div class="thumb"><img src="${img(r.image_seed,400,260)}" alt="">
-        <span class="b badge beg">${esc(r.meal_type)}</span></div><div class="body"><div class="t">${esc(r.title)}</div><div class="m">${r.minutes} min · ${r.kcal} kcal</div></div></div>`).join("")}</div>`;
+      body = `<div class="meal-tools"><input id="mealSearch" class="meal-search" type="search" placeholder="Search recipes or ingredients…" value="${esc(_mealQ)}"><div class="chips" id="mealCats">${["all","breakfast","lunch","dinner","snack"].map(c=>`<button data-c="${c}" class="chip ${_mealCat===c?'on':''}">${c==='all'?'All':c.charAt(0).toUpperCase()+c.slice(1)}</button>`).join("")}</div></div><div id="mealResults"></div>`;
     }
     view.innerHTML = `<h1 class="page">Meals</h1><p class="page-sub">Simple, gentle recipes to support your routine.</p>${tabs}${body}`;
     view.querySelectorAll(".tabs button").forEach(b => b.onclick = () => location.hash = "#/meals/" + b.dataset.t);
+    if (tab === "library") {
+      const results = view.querySelector("#mealResults");
+      const cardHtml = r => `<div class="wcard meal" data-id="${r.id}"><div class="thumb"><img src="${img(r.image_seed,400,260)}" alt=""><span class="b badge beg">${esc(r.meal_type)}</span></div><div class="body"><div class="t">${esc(r.title)}</div><div class="m">${r.minutes} min \u00b7 ${r.kcal} kcal</div></div></div>`;
+      const doRender = () => {
+        const q = _mealQ.trim().toLowerCase();
+        const list = recipes.filter(r => {
+          if (_mealCat !== "all" && r.meal_type !== _mealCat) return false;
+          if (!q) return true;
+          const hay = (r.title + " " + (r.ingredients||[]).join(" ") + " " + (r.instructions||[]).join(" ")).toLowerCase();
+          return hay.indexOf(q) !== -1;
+        });
+        results.innerHTML = list.length ? `<p class="meal-count">${list.length} recipe${list.length===1?'':'s'}</p><div class="grid-cards">${list.map(cardHtml).join("")}</div>` : `<p class="page-sub">No recipes match your search.</p>`;
+        results.querySelectorAll(".meal").forEach(el => el.onclick = () => location.hash = "#/recipe/" + el.dataset.id);
+      };
+      doRender();
+      const search = view.querySelector("#mealSearch");
+      search.oninput = () => { _mealQ = search.value; doRender(); };
+      view.querySelectorAll("#mealCats .chip").forEach(b => b.onclick = () => { _mealCat = b.dataset.c; view.querySelectorAll("#mealCats .chip").forEach(x => x.classList.toggle("on", x === b)); doRender(); });
+    }
     view.querySelectorAll(".meal-row, .meal").forEach(el => el.onclick = (e) => { if (e.target.closest(".chk")) return; location.hash = "#/recipe/" + el.dataset.id; });
     view.querySelectorAll(".chk[data-done]").forEach(c => c.onclick = (e) => { e.stopPropagation(); DB.dayToggle("meals", c.dataset.done); vMeals("today"); });
   }
